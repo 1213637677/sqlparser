@@ -1,0 +1,12 @@
+version 1.0
+测试sql语句:select * from test;
+QUERY
+|
+|_______SELECT_LIST
+|	|
+|	|_______*
+|
+|_______TBL_LIST
+	|
+	|_______test
+
