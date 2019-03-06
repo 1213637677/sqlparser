@@ -163,6 +163,20 @@ char *getelemname(int nodetype)
 		case USING : s = "USING"; break;
 		case ALLCOLUMN : s = "*"; break;
 		case FUNC_NAME : s = "FUNC_NAME"; break;
+		case DELETE : s = "DELETE"; break;
+		case LOW_PRIORITY : s = "LOW_PRIORITY"; break;
+		case QUICK : s = "QUICK"; break;
+		case IGNORE : s = "IGNORE"; break;
+		case DELETE_QUERY : s = "DELETE_QUERY"; break;
+		case INSERT : s = "INSERT"; break;
+		case VALUES : s = "VALUES"; break;
+		case INSERT_QUERY : s = "INSERT_QUERY"; break;
+		case ON_DUPLICATE_KEY_UPDATE : s = "ON_DUPLICATE_KEY_UPDATE"; break;
+		case DELAYED : s = "DELAYED"; break;
+		case INSERT_VALS : s = "INSERT_VALS"; break;
+		case DEFAULT : s = "DEFAULT"; break;
+		case SET : s = "SET"; break;
+		case UPDATE : s = "UPDATE"; break;
 	}
 	return s;
 }

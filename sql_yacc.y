@@ -37,12 +37,13 @@ int select_opt_state = 0;
 %left '*' '/' '%' MOD
 %left '^'
 %nonassoc UMINUS
+%nonassoc USE FORCE IGNORE
 
 /*新关键字*/
-%token ADD SUB MUL DIV MOD AND OR XOR OROP ANDOP XOROP SHIFT NOT COMPARISON COMPARISON_ANY COMPARISON_SOME COMPARISON_ALL BETWEEN BTWAND LIKE NOTLIKE IS ISNOT NULLX IN NOTIN EXISTS SELECT SELECT_QUERY FROM WHERE GROUP BY GROUP_BY BY_NODE ASC DESC WITH_ROLLUP HAVING ORDER ORDER_BY LIMIT INTO ALL DISTINCT DISTINCTROW HIGH_PRIORITY STRAIGHT_JOIN SQL_SMALL_RESULT SQL_BIG_RESULT SQL_CALC_FOUND_ROWS ALLCOLUMN AS DTNAME JOIN JOINTYPE INNER CROSS OUTER LEFT RIGHT ON USING USE INDEXTYPE KEY INDEX FOR NATURAL FORCE IGNORE WITH ROLLUP ANY SOME TFNAME FUNC_NAME FCOUNT
+%token ADD SUB MUL DIV MOD AND OR XOR OROP ANDOP XOROP SHIFT NOT COMPARISON COMPARISON_ANY COMPARISON_SOME COMPARISON_ALL BETWEEN BTWAND LIKE NOTLIKE IS ISNOT NULLX IN NOTIN EXISTS SELECT SELECT_QUERY FROM WHERE GROUP BY GROUP_BY BY_NODE ASC DESC WITH_ROLLUP HAVING ORDER ORDER_BY LIMIT INTO ALL DISTINCT DISTINCTROW HIGH_PRIORITY STRAIGHT_JOIN SQL_SMALL_RESULT SQL_BIG_RESULT SQL_CALC_FOUND_ROWS ALLCOLUMN AS DTNAME JOIN JOINTYPE INNER CROSS OUTER LEFT RIGHT ON USING USE INDEXTYPE KEY INDEX FOR NATURAL FORCE IGNORE WITH ROLLUP ANY SOME TFNAME FUNC_NAME FCOUNT DELETE LOW_PRIORITY QUICK DELETE_QUERY INSERT VALUES INSERT_QUERY ON_DUPLICATE_KEY_UPDATE DUPLICATE UPDATE DELAYED INSERT_VALS DEFAULT SET
 
 /*新节点值*/
-%type <a> stmt_list stmt expr val_list select_stmt opt_where opt_groupby groupby_list opt_asc_desc opt_with_rollup opt_having opt_orderby opt_limit opt_into_list column_list select_opts select_expr_list select_expr opt_as_alias table_references table_reference table_factor opt_as join_table opt_join_condition join_condition index_hint_list index_hint index_list table_subquery opt_val_list
+%type <a> stmt_list stmt expr val_list select_stmt opt_where opt_groupby groupby_list opt_asc_desc opt_with_rollup opt_having opt_orderby opt_limit opt_into_list column_list select_opts select_expr_list select_expr opt_as_alias table_references table_reference table_factor opt_as join_table opt_join_condition join_condition index_hint_list index_hint index_list table_subquery opt_val_list delete_stmt delete_opts delete_list opt_dot_star insert_stmt opt_ondupupdate insert_opts opt_into opt_col_names insert_vals_list insert_vals insert_asgn_list update_stmt update_opts update_asgn_list
 %type <intval> opt_inner_cross opt_outer left_or_right opt_left_or_right key_or_index opt_for_join 
 
 %%
@@ -109,6 +110,7 @@ expr: NAME '(' opt_val_list ')' { struct ast *rtn = newnode_1(FUNC_NAME, $1); rt
  ;
 expr: FCOUNT '(' '*' ')' { struct ast *rtn = newnode_1(FUNC_NAME, "COUNT"); rtn->childnode = newnode(ALLCOLUMN); $$ = rtn; }
  |  FCOUNT '(' expr ')' { struct ast *rtn = newnode_1(FUNC_NAME, "COUNT"); rtn->childnode = $3; $$ = rtn; }
+ ;
 /***select语句***/
 stmt: select_stmt { $$ = $1; }
  ;
@@ -294,7 +296,88 @@ index_list: NAME { $$ = newnode_1(NAME, $1); }
 table_subquery: '(' select_stmt ')' { $$ = $2; }
  ;
 
+/*DELETE语句*/
+stmt: delete_stmt
+ ;
+delete_stmt: DELETE delete_opts FROM NAME opt_as_alias opt_where opt_orderby opt_limit
+    { struct ast *child = newnode(DELETE); child->childnode = $2; struct ast *temp; if($5 != NULL){ temp = newnode_1(NAME, $4); temp->nextnode = $5->childnode; $5->childnode = temp; child->nextnode = newast(FROM, $5);} else { child->nextnode = newast(FROM, newnode_1(NAME, $4));} temp = child->nextnode; if($6 != NULL) {temp->nextnode = $6; temp = temp->nextnode; } if($7 != NULL) {temp->nextnode = $7; temp = temp->nextnode; } if($8 != NULL) {temp->nextnode = $8; temp = temp->nextnode; } $$ = newast(DELETE_QUERY, child); }
+ ;
+delete_opts: delete_opts LOW_PRIORITY { struct ast *node = newnode(LOW_PRIORITY); node->nextnode = $1; $$ = node; }
+ |  delete_opts QUICK { struct ast *node = newnode(QUICK); node->nextnode = $1; $$ = node; }
+ |  delete_opts IGNORE { struct ast *node = newnode(IGNORE); node->nextnode = $1; $$ = node; }
+ |  /*空*/ { $$ = NULL; }
+ ;
+delete_stmt: DELETE delete_opts delete_list FROM table_references opt_where { struct ast *node; struct ast *temp; if($2 != NULL){ temp = $2; while(temp->nextnode != NULL) temp = temp->nextnode; temp->nextnode = $3; node = newast(DELETE, $2); } else node = newast(DELETE, $3); node->nextnode = newast(FROM, $5); if($6 != NULL) node->nextnode->nextnode = $6; $$ = newast(DELETE_QUERY, node); }
+ ;
+delete_list: NAME opt_dot_star { $$ = newnode_1(NAME, $1); }
+ |  delete_list ',' NAME opt_dot_star { struct ast *node = newnode_1(NAME, $3); node->nextnode = $1; $$ = node; }
+ ;
+opt_dot_star: /*空*/ { $$ = NULL; }
+ |  '.' '*' { $$ = NULL; }
+ ;
+delete_stmt: DELETE delete_opts FROM delete_list USING table_references opt_where { struct ast *node = newast(DELETE, $2); struct ast *temp = node; temp->nextnode = newast(FROM, $4); temp = temp->nextnode; temp->nextnode = newast(USING, $6); temp = temp->nextnode; if($7 != NULL) temp->nextnode = $7; $$ = newast(DELETE_QUERY, node); }
+ ;
 
+/*INSERT语句*/
+stmt: insert_stmt { $$ = $1; }
+ ;
+insert_stmt: INSERT insert_opts opt_into NAME opt_col_names VALUES insert_vals_list opt_ondupupdate
+    { struct ast *node = newast(INSERT, $2); struct ast *temp = newnode_1(NAME, $4); if($5 != NULL) temp->childnode = $5; $3->childnode = temp; node->nextnode = $3; temp = node->nextnode; temp->nextnode = newast(VALUES, $7); temp = temp->nextnode; if($8 != NULL) temp->nextnode = $8; $$ = newast(INSERT_QUERY, node); }
+ ;
+opt_ondupupdate: /*空*/ { $$ = NULL; }
+ |  ON DUPLICATE KEY UPDATE insert_asgn_list { $$ = newast(ON_DUPLICATE_KEY_UPDATE, $5); }
+ ;
+insert_opts: /*空*/ { select_opt_state = 0; $$ = NULL; }
+ |  insert_opts LOW_PRIORITY { if(select_opt_state & 01) yyerror("duplicate L-D-H option"); select_opt_state = select_opt_state | 01; struct ast *nodelist = newnode(LOW_PRIORITY); nodelist->nextnode = $1; $$ = nodelist; }
+ |  insert_opts DELAYED { if(select_opt_state & 01) yyerror("duplicate L-D-H option"); select_opt_state = select_opt_state | 01; struct ast *nodelist = newnode(DELAYED); nodelist->nextnode = $1; $$ = nodelist; }
+ |  insert_opts HIGH_PRIORITY { if(select_opt_state & 01) yyerror("duplicate L-D-H option"); select_opt_state = select_opt_state | 01; struct ast *nodelist = newnode(HIGH_PRIORITY); nodelist->nextnode = $1; $$ = nodelist; }
+ |  insert_opts IGNORE { if(select_opt_state & 02) yyerror("duplicate IGNORE option"); select_opt_state = select_opt_state | 02; struct ast *nodelist = newnode(IGNORE); nodelist->nextnode = $1; $$ = nodelist; }
+ ;
+opt_into: INTO { $$ = newnode(INTO); }
+ |  /*空*/ { $$ = newnode(INTO); }
+ ;
+opt_col_names: /*空*/ { $$ = NULL; }
+ |  '(' column_list ')' { $$ = $2; }
+ ;
+insert_vals_list: '(' insert_vals ')' { $$ = newast(INSERT_VALS, $2); }
+ |  insert_vals_list ',' '(' insert_vals ')' { struct ast *node = newast(INSERT_VALS, $4); node->nextnode = $1; $$ = node; }
+ ;
+insert_vals: expr { $$ = $1; }
+ |  DEFAULT { $$ = newnode(DEFAULT); }
+ |  insert_vals ',' expr { struct ast *child = $3; child->nextnode = $1; $$ = child; }
+ |  insert_vals ',' DEFAULT { struct ast *child = newnode(DEFAULT); child->nextnode = $1; $$ = child; }
+ ;
+insert_stmt:INSERT insert_opts opt_into NAME SET insert_asgn_list opt_ondupupdate
+    { struct ast *node = newast(INSERT, $2); $3->childnode = newnode_1(NAME, $4); node->nextnode = $3; $3->nextnode = newast(SET, $6); if($7 != NULL) $3->nextnode->nextnode = $7; $$ = newast(INSERT_QUERY, node); }
+ ;
+insert_asgn_list: NAME COMPARISON expr { struct ast *node = newnode_1(NAME, $1); node->nextnode = $3; $$ = newast_1(COMPARISON, node, $2); }
+ |  NAME COMPARISON DEFAULT { struct ast *node = newnode_1(NAME, $1); node->nextnode = newnode(DEFAULT); $$ = newast_1(COMPARISON, node, $2); }
+ |  insert_asgn_list ',' NAME COMPARISON expr { struct ast *node = newnode_1(NAME, $3); node->nextnode = $5; node = newast_1(COMPARISON, node, $4); node->nextnode = $1; $$ = node; }
+ |  insert_asgn_list ',' NAME COMPARISON DEFAULT { struct ast *node = newnode_1(NAME, $3); node->nextnode = newnode(DEFAULT); node = newast_1(COMPARISON, node, $4); node->nextnode = $1; $$ = node; }
+ ;
+insert_stmt: INSERT insert_opts opt_into NAME opt_col_names select_stmt opt_ondupupdate
+    { struct ast *node = newast(INSERT, $2); $3->childnode = newnode_1(NAME, $4); if($5 != NULL) $3->childnode->childnode = $5; node->nextnode = $3; $3->nextnode = $6; if($7 != NULL) $3->nextnode->nextnode = $7; $$ = node; }
+ ;
+
+/*UPDATE语句*/
+stmt: update_stmt { $$ = $1; }
+ ;
+update_stmt: UPDATE update_opts table_references SET update_asgn_list opt_where opt_orderby opt_limit
+    { struct ast *temp; if($2 != NULL){ temp = $3; if(temp->nextnode != NULL) temp = temp->nextnode; temp->nextnode = $2; } struct ast *node = newast(UPDATE, $3); node->nextnode = newast(SET, $5); temp = node->nextnode; if($6 != NULL) { temp->nextnode = $6; temp = temp->nextnode; } if($7 != NULL) { temp->nextnode = $7; temp = temp->nextnode; } if($8 != NULL) { temp->nextnode = $8; temp = temp->nextnode; } $$ = newast(UPDATE, node); }
+ ;
+update_opts: /*空规则*/ { $$ = NULL; }
+ |  insert_opts LOW_PRIORITY { struct ast *node = newnode(LOW_PRIORITY); node->nextnode = $1; $$ = node; }
+ |  insert_opts IGNORE { struct ast *node = newnode(IGNORE); node->nextnode = $1; $$ = node; }
+ ;
+update_asgn_list: NAME COMPARISON expr { struct ast *node = newnode_1(NAME, $1); node->nextnode = $3; $$ = newast_1(COMPARISON, node, $2); }
+ |  NAME COMPARISON DEFAULT { struct ast *node = newnode_1(NAME, $1); node->nextnode = newnode(DEFAULT); $$ = newast_1(COMPARISON, node, $2); }
+ |  NAME '.' NAME COMPARISON expr { struct ast *node = newnode_1(NAME, $1); node->nextnode = newnode_1(NAME, $3); node = newast(DTNAME, node); node->nextnode = $5; $$ = newast_1(COMPARISON, node, $4);}
+ |  NAME '.' NAME COMPARISON DEFAULT { struct ast *node = newnode_1(NAME, $1); node->nextnode = newnode_1(NAME, $3); node = newast(DTNAME, node); node->nextnode = newnode(DEFAULT); $$ = newast_1(COMPARISON, node, $4);}
+ |  update_asgn_list ',' NAME COMPARISON expr { struct ast *node = newnode_1(NAME, $3); node->nextnode = $5; node = newast_1(COMPARISON, node, $4); node->nextnode = $1; $$ = node; }
+ |  update_asgn_list ',' NAME COMPARISON DEFAULT { struct ast *node = newnode_1(NAME, $3); node->nextnode = newnode(DEFAULT); node = newast_1(COMPARISON, node, $4); node->nextnode = $1; $$ = node; }
+ |  update_asgn_list ',' NAME '.' NAME COMPARISON expr { struct ast *node = newnode_1(NAME, $3); node->nextnode = newnode_1(NAME, $5); node = newast(DTNAME, node); node->nextnode = $7; node = newast_1(COMPARISON, node, $6); node->nextnode = $1; $$ = node; }
+ |  update_asgn_list ',' NAME '.' NAME COMPARISON DEFAULT{ struct ast *node = newnode_1(NAME, $3); node->nextnode = newnode_1(NAME, $5); node = newast(DTNAME, node); node->nextnode = newnode(DEFAULT); node = newast_1(COMPARISON, node, $6); node->nextnode = $1; $$ = node; }
+ ;
 %%
 
 void yyerror(char *s, ...)

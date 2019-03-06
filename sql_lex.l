@@ -63,11 +63,22 @@ FOR { printf("for\n"); return FOR; }
 NATURAL { printf("natural\n"); return NATURAL; }
 BETWEEN { BEGIN(BTWMODE); return BETWEEN; }
 <BTWMODE>AND { BEGIN(INITIAL); return BTWAND; }
-FORCE {printf("force"); BEGIN INITIAL; return FORCE; }
-IGNORE {printf("ignore"); BEGIN INITIAL; return IGNORE; }
-ANY {printf("any"); BEGIN INITIAL; return ANY; }
-SOME {printf("some"); BEGIN INITIAL; return SOME; }
-COUNT {printf("count"); return FCOUNT; }
+FORCE { printf("force\n"); BEGIN INITIAL; return FORCE; }
+IGNORE { printf("ignore\n"); BEGIN INITIAL; return IGNORE; }
+ANY { printf("any\n"); BEGIN INITIAL; return ANY; }
+SOME { printf("some\n"); BEGIN INITIAL; return SOME; }
+COUNT { printf("count\n"); return FCOUNT; }
+DELETE { printf("delete\n"); return DELETE; }
+LOW_PRIORITY { printf("low_priority\n"); return LOW_PRIORITY; }
+QUICK { printf("quick\n"); return QUICK; }
+INSERT { printf("insert\n"); return INSERT; }
+VALUES? { printf("values\n"); return VALUES; }
+DUPLICATE { printf("duplicate\n"); return DUPLICATE; }
+UPDATE { printf("update\n"); return UPDATE; }
+DELAYED { printf("delayed\n"); return DELAYED; }
+DEFAULT { printf("default\n"); return DEFAULT; }
+SET { printf("set\n"); return SET; }
+
 
 -?[0-9]+ { yylval.strval = strdup(yytext); return INTNUM; }
 
