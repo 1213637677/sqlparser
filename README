@@ -1,92 +1,11 @@
-version 1.0
-测试sql语句:select * from test;
-QUERY
-|
-|_______SELECT_LIST
-|	|
-|	|_______*
-|
-|_______TBL_LIST
-	|
-	|_______test
+version 1.1
 
+运行环境：Ubuntu 16.04
+	gcc (Ubuntu 5.4.0-6ubuntu1~16.04.10) 5.4.0
+	bison (GNU Bison) 3.0.4
 
-FROM格式
-最简单的格式，例：
-FROM
-	table1
-	table2
-	...
-含有AS，例：
-FROM
-	AS
-		table1
-		alias1
-	table2
-	AS
-		table3
-		alias3
-含有.，例：
-FROM
-	.
-		db1
-		table1
-	AS
-		.
-			db1
-			table2
-		alias2
-含有hint, hint放在table的子树中（此时不能含有.，为什么?），例:
-FROM
-	table1
-		USE_INDEX
-			index1
-		IGNORE_KEY
-			index2
-	AS
-		table2
-				USE_INDEX
-					index3
-		alias2
-join格式：
-table_references:
-    escaped_table_reference [, escaped_table_reference] ...
+1.在程序目录下运行make生成sql-parser
+2.运行./sql-parser test.sql
+3.sql_json.out中生成语法树的json格式
 
-escaped_table_reference:
-    table_reference
-  | { OJ table_reference }
-
-table_reference:
-    table_factor
-  | joined_table
-
-table_factor:
-    tbl_name [PARTITION (partition_names)]
-        [[AS] alias] [index_hint_list]
-  | table_subquery [AS] alias [(col_list)]
-  | ( table_references )
-
-joined_table:
-    table_reference {[INNER | CROSS] JOIN | STRAIGHT_JOIN} table_factor [join_specification]
-  | table_reference {LEFT|RIGHT} [OUTER] JOIN table_reference join_specification
-  | table_reference NATURAL [INNER | {LEFT|RIGHT} [OUTER]] JOIN table_factor
-
-join_specification:
-    ON search_condition
-  | USING (join_column_list)
-
-join_column_list:
-    column_name [, column_name] ...
-
-index_hint_list:
-    index_hint [, index_hint] ...
-
-index_hint:
-    USE {INDEX|KEY}
-      [FOR {JOIN|ORDER BY|GROUP BY}] ([index_list])
-  | {IGNORE|FORCE} {INDEX|KEY}
-      [FOR {JOIN|ORDER BY|GROUP BY}] (index_list)
-
-index_list:
-    index_name [, index_name] ...
 
