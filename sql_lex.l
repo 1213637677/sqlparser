@@ -1,6 +1,7 @@
 %option noyywrap nodefault yylineno case-insensitive
 %{
 	#include <stdio.h>
+	#include <stdarg.h>
 	
 	#include "parse_node.h"
 	#include "sql_yacc.tab.h"
@@ -14,12 +15,13 @@
 //">=" { printf("greatequal\n"); return GREATEQUAL; }
 //"<=" { printf("lessequal\n"); return LESSEQUAL; }
 %}
-%x BTWMODE
+%s BTWMODE
 
 %%
 SELECT { printf("select\n"); return SELECT; }
 FROM { printf("from\n"); return FROM; }
 WHERE { printf("where\n"); return WHERE; }
+<BTWMODE>AND { /*先后顺序居然对结果有影响！！！！！！*/printf("between and\n"); BEGIN(INITIAL); return BTWAND; }
 AND { printf("and\n"); return AND; }
 OR { printf("or\n"); return OR; }
 XOR { printf("xor\n"); return XOR; }
@@ -61,8 +63,7 @@ KEY { printf("key\n"); return KEY; }
 INDEX { printf("index\n"); return INDEX; }
 FOR { printf("for\n"); return FOR; }
 NATURAL { printf("natural\n"); return NATURAL; }
-BETWEEN { BEGIN(BTWMODE); return BETWEEN; }
-<BTWMODE>AND { BEGIN(INITIAL); return BTWAND; }
+BETWEEN { printf("between\n"); BEGIN(BTWMODE); return BETWEEN; }
 FORCE { printf("force\n"); BEGIN INITIAL; return FORCE; }
 IGNORE { printf("ignore\n"); BEGIN INITIAL; return IGNORE; }
 ANY { printf("any\n"); BEGIN INITIAL; return ANY; }
@@ -80,13 +81,13 @@ DEFAULT { printf("default\n"); return DEFAULT; }
 SET { printf("set\n"); return SET; }
 
 
--?[0-9]+ { yylval.strval = strdup(yytext); return INTNUM; }
+[0-9]+ { yylval.strval = strdup(yytext); return INTNUM; }
 
--?[0-9]+"."[0-9]* |
--?"."[0-9]+ |
--?[0-9]+E[-+]?[0-9]+ |
--?[0-9]+"."[0-9]*E[-+]?[0-9]+ |
--?"."[0-9]+E[-+]?[0-9]+ { yylval.strval = strdup(yytext); return APPROXNUM; }
+[0-9]+"."[0-9]* |
+"."[0-9]+ |
+[0-9]+E[-+]?[0-9]+ |
+[0-9]+"."[0-9]*E[-+]?[0-9]+ |
+"."[0-9]+E[-+]?[0-9]+ { yylval.strval = strdup(yytext); return APPROXNUM; }
 
 TRUE |
 UNKNOWN |
@@ -124,7 +125,7 @@ B'[01]+' { yylval.strval = strdup(yytext); return STRING; }
 `[^`/\\.\n]+` {yylval.strval = strdup(yytext+1); yylval.strval[yyleng-2] = 0; return NAME; }
 `[^`\n]*$ { yyerror("unterminated quoted name %s", yytext); }
 
-[ \t] {}
+[ \t\n] {}
 . { printf("unknown character in input: %c\n", *yytext); }
 %%
 

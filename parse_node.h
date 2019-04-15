@@ -2,6 +2,7 @@
 #define PARSE_NODE_H
 
 #include "sql_yacc.tab.h"
+#include <string.h>
 
 extern int yylineno;
 void yyerror(char *s, ...);
@@ -20,6 +21,8 @@ struct ast *addnewwherenode(int nodetype, struct ast *oldnode, struct ast *newno
 struct ast *newnode_1(int nodetype, char *val);
 struct ast *newnode(int nodetype);
 void showtree(struct ast *node, int layer);
+void createjson(struct ast *node, FILE *writerstr, int state);
+void createjson_1(struct ast *node, FILE *writerstr, int state);
 char *getelemname(int nodetype);
 
 #endif

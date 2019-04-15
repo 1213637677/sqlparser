@@ -110,6 +110,49 @@ void showtree(struct ast *node, int layer)
 	return;
 }
 
+/*将树转化为json格式*/
+void createjson(struct ast *node, FILE *fp, int state)
+{
+    if(node == NULL) return;
+    if(state == 0) fprintf(fp, ",");
+    fprintf(fp, "{");
+    //typenode
+    //if(node->val == NULL) printf("%s\n", getelemname(node->nodetype));
+    fprintf(fp, "\"nodetype\":");
+    fprintf(fp, "\"");
+    fprintf(fp, "%s", getelemname(node->nodetype));
+    fprintf(fp, "\"");
+    //value
+    if(node->val != NULL){
+        fprintf(fp, ",\"value\":");
+        fprintf(fp, "\"");
+        fprintf(fp, "%s", node->val);
+        fprintf(fp, "\"");
+    }
+    //child_node
+    if(node->childnode != NULL){
+        /*for(int i = 0; i < node->size; i++){
+            struct ast *temp = node->nodelist[i];
+            showtree(temp, layer+1);
+        }*/
+        fprintf(fp, ",\"child_node\":[");
+        struct ast *temp = node->childnode;
+        createjson(temp, fp,1);
+        temp = temp->nextnode;
+        while(temp != NULL){
+            createjson(temp, fp,0);
+            temp = temp->nextnode;
+        }
+        fprintf(fp, "]");
+    }
+    fprintf(fp, "}");
+}
+//{"nodetype":"SELECT_QUERY","child_node":[{"nodetype":"SELECT","child_node":[{"nodetype":"*"}]},{"nodetype":"FROM","child_node":[{"nodetype":"NAME","value":"DISTRICT"}]},{"nodetype":"WHERE","child_node":[{"nodetype":"AND","child_node":[{"nodetype":"COMPARISON","value":">","child_node":[{"nodetype":"NAME","value":"D_NEXT_O_ID"},{"nodetype":"INTNUM","value":"3001"}]},{"nodetype":"COMPARISON","value":"<","child_node":[{"nodetype":"NAME","value":"D_NEXT_O_ID"},{"nodetype":"INTNUM","value":"3001"}]}]}]}]}
+void createjson_1(struct ast *node, FILE *writerstr, int state)
+{
+	
+}
+
 /* 将枚举类型转化为char* */
 char *getelemname(int nodetype)
 {
@@ -177,6 +220,13 @@ char *getelemname(int nodetype)
 		case DEFAULT : s = "DEFAULT"; break;
 		case SET : s = "SET"; break;
 		case UPDATE : s = "UPDATE"; break;
+		case NAME : s = "NAME"; break;
+		case STRING : s = "STRING"; break;
+		case INTNUM : s = "INTNUM"; break;
+		case BOOL : s = "BOOL"; break;
+		case APPROXNUM : s = "APPROXNUM"; break;
+		case COMPARISON : s = "COMPARISON"; break;
+		case UPDATE_QUERY : s = "UPDATE_QUERY"; break;
 	}
 	return s;
 }

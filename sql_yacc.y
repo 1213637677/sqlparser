@@ -1,10 +1,13 @@
 %{
 #include <stdlib.h>
+#include <stdarg.h>
+#include <string.h>
 #include <stdio.h>
 #include "parse_node.h"
 int yylex(void);
 void yyerror(char *s, ...);
 int select_opt_state = 0;
+FILE * fp;
 %}
 
 /*union不能直接使用string*/
@@ -40,7 +43,7 @@ int select_opt_state = 0;
 %nonassoc USE FORCE IGNORE
 
 /*新关键字*/
-%token ADD SUB MUL DIV MOD AND OR XOR OROP ANDOP XOROP SHIFT NOT COMPARISON COMPARISON_ANY COMPARISON_SOME COMPARISON_ALL BETWEEN BTWAND LIKE NOTLIKE IS ISNOT NULLX IN NOTIN EXISTS SELECT SELECT_QUERY FROM WHERE GROUP BY GROUP_BY BY_NODE ASC DESC WITH_ROLLUP HAVING ORDER ORDER_BY LIMIT INTO ALL DISTINCT DISTINCTROW HIGH_PRIORITY STRAIGHT_JOIN SQL_SMALL_RESULT SQL_BIG_RESULT SQL_CALC_FOUND_ROWS ALLCOLUMN AS DTNAME JOIN JOINTYPE INNER CROSS OUTER LEFT RIGHT ON USING USE INDEXTYPE KEY INDEX FOR NATURAL FORCE IGNORE WITH ROLLUP ANY SOME TFNAME FUNC_NAME FCOUNT DELETE LOW_PRIORITY QUICK DELETE_QUERY INSERT VALUES INSERT_QUERY ON_DUPLICATE_KEY_UPDATE DUPLICATE UPDATE DELAYED INSERT_VALS DEFAULT SET
+%token ADD SUB MUL DIV MOD AND OR XOR OROP ANDOP XOROP SHIFT NOT COMPARISON COMPARISON_ANY COMPARISON_SOME COMPARISON_ALL BETWEEN BTWAND LIKE NOTLIKE IS ISNOT NULLX IN NOTIN EXISTS SELECT SELECT_QUERY FROM WHERE GROUP BY GROUP_BY BY_NODE ASC DESC WITH_ROLLUP HAVING ORDER ORDER_BY LIMIT INTO ALL DISTINCT DISTINCTROW HIGH_PRIORITY STRAIGHT_JOIN SQL_SMALL_RESULT SQL_BIG_RESULT SQL_CALC_FOUND_ROWS ALLCOLUMN AS DTNAME JOIN JOINTYPE INNER CROSS OUTER LEFT RIGHT ON USING USE INDEXTYPE KEY INDEX FOR NATURAL FORCE IGNORE WITH ROLLUP ANY SOME TFNAME FUNC_NAME FCOUNT DELETE LOW_PRIORITY QUICK DELETE_QUERY INSERT VALUES INSERT_QUERY ON_DUPLICATE_KEY_UPDATE DUPLICATE UPDATE DELAYED INSERT_VALS DEFAULT SET UPDATE_QUERY
 
 /*新节点值*/
 %type <a> stmt_list stmt expr val_list select_stmt opt_where opt_groupby groupby_list opt_asc_desc opt_with_rollup opt_having opt_orderby opt_limit opt_into_list column_list select_opts select_expr_list select_expr opt_as_alias table_references table_reference table_factor opt_as join_table opt_join_condition join_condition index_hint_list index_hint index_list table_subquery opt_val_list delete_stmt delete_opts delete_list opt_dot_star insert_stmt opt_ondupupdate insert_opts opt_into opt_col_names insert_vals_list insert_vals insert_asgn_list update_stmt update_opts update_asgn_list
@@ -50,8 +53,8 @@ int select_opt_state = 0;
 
 /***顶层分析***/
 
-stmt_list: stmt ';' { showtree($1,0); $$ = $1; }
- |  stmt_list stmt ';' { showtree($2,0); $2->nextnode = $1; $$ = $2; }
+stmt_list: stmt ';' { /*showtree($1, 0);*/createjson($1, fp, 1); fprintf(fp, "\n"); free($1); $1 = NULL; }
+ |  stmt_list stmt ';' { /*showtree($2, 0);*/createjson($2, fp, 1); fprintf(fp, "\n"); free($2); $2 = NULL; }
  ;
 
 /***表达式***/
@@ -363,7 +366,7 @@ insert_stmt: INSERT insert_opts opt_into NAME opt_col_names select_stmt opt_ondu
 stmt: update_stmt { $$ = $1; }
  ;
 update_stmt: UPDATE update_opts table_references SET update_asgn_list opt_where opt_orderby opt_limit
-    { struct ast *temp; if($2 != NULL){ temp = $3; if(temp->nextnode != NULL) temp = temp->nextnode; temp->nextnode = $2; } struct ast *node = newast(UPDATE, $3); node->nextnode = newast(SET, $5); temp = node->nextnode; if($6 != NULL) { temp->nextnode = $6; temp = temp->nextnode; } if($7 != NULL) { temp->nextnode = $7; temp = temp->nextnode; } if($8 != NULL) { temp->nextnode = $8; temp = temp->nextnode; } $$ = newast(UPDATE, node); }
+    { struct ast *temp; if($2 != NULL){ temp = $3; if(temp->nextnode != NULL) temp = temp->nextnode; temp->nextnode = $2; } struct ast *node = newast(UPDATE, $3); node->nextnode = newast(SET, $5); temp = node->nextnode; if($6 != NULL) { temp->nextnode = $6; temp = temp->nextnode; } if($7 != NULL) { temp->nextnode = $7; temp = temp->nextnode; } if($8 != NULL) { temp->nextnode = $8; temp = temp->nextnode; } $$ = newast(UPDATE_QUERY, node); }
  ;
 update_opts: /*空规则*/ { $$ = NULL; }
  |  insert_opts LOW_PRIORITY { struct ast *node = newnode(LOW_PRIORITY); node->nextnode = $1; $$ = node; }
@@ -385,8 +388,15 @@ void yyerror(char *s, ...)
 	printf("error");
 }
 
-int main()
+int main(int argc, char **argv)
 {
+	extern FILE *yyin;
+	yyin = fopen(argv[1], "r");
+	if((fp=fopen("sql_json.out", "w"))==NULL){
+        	printf("cannot open outfile\n");
+        	exit(0);
+	}
 	yyparse();
+	fclose(fp);
 	return 0;
 }
