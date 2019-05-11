@@ -43,10 +43,10 @@ FILE * fp;
 %nonassoc USE FORCE IGNORE
 
 /*新关键字*/
-%token ADD SUB MUL DIV MOD AND OR XOR OROP ANDOP XOROP SHIFT NOT COMPARISON COMPARISON_ANY COMPARISON_SOME COMPARISON_ALL BETWEEN BTWAND LIKE NOTLIKE IS ISNOT NULLX IN NOTIN EXISTS SELECT SELECT_QUERY FROM WHERE GROUP BY GROUP_BY BY_NODE ASC DESC WITH_ROLLUP HAVING ORDER ORDER_BY LIMIT INTO ALL DISTINCT DISTINCTROW HIGH_PRIORITY STRAIGHT_JOIN SQL_SMALL_RESULT SQL_BIG_RESULT SQL_CALC_FOUND_ROWS ALLCOLUMN AS DTNAME JOIN JOINTYPE INNER CROSS OUTER LEFT RIGHT ON USING USE INDEXTYPE KEY INDEX FOR NATURAL FORCE IGNORE WITH ROLLUP ANY SOME TFNAME FUNC_NAME FCOUNT DELETE LOW_PRIORITY QUICK DELETE_QUERY INSERT VALUES INSERT_QUERY ON_DUPLICATE_KEY_UPDATE DUPLICATE UPDATE DELAYED INSERT_VALS DEFAULT SET UPDATE_QUERY
+%token ADD SUB MUL DIV MOD AND OR XOR OROP ANDOP XOROP SHIFT NOT COMPARISON COMPARISON_ANY COMPARISON_SOME COMPARISON_ALL BETWEEN BTWAND LIKE NOTLIKE IS ISNOT NULLX IN NOTIN EXISTS SELECT SELECT_QUERY FROM WHERE GROUP BY GROUP_BY BY_NODE ASC DESC WITH_ROLLUP HAVING ORDER ORDER_BY LIMIT INTO ALL DISTINCT DISTINCTROW HIGH_PRIORITY STRAIGHT_JOIN SQL_SMALL_RESULT SQL_BIG_RESULT SQL_CALC_FOUND_ROWS ALLCOLUMN AS DTNAME JOIN JOINTYPE INNER CROSS OUTER LEFT RIGHT ON USING USE INDEXTYPE KEY INDEX FOR NATURAL FORCE IGNORE WITH ROLLUP ANY SOME TFNAME FUNC_NAME FCOUNT DELETE LOW_PRIORITY QUICK DELETE_QUERY INSERT VALUES INSERT_QUERY ON_DUPLICATE_KEY_UPDATE DUPLICATE UPDATE DELAYED INSERT_VALS DEFAULT SET UPDATE_QUERY SELECT_EXPR_LIST SELECT_OPTS
 
 /*新节点值*/
-%type <a> stmt_list stmt expr val_list select_stmt opt_where opt_groupby groupby_list opt_asc_desc opt_with_rollup opt_having opt_orderby opt_limit opt_into_list column_list select_opts select_expr_list select_expr opt_as_alias table_references table_reference table_factor opt_as join_table opt_join_condition join_condition index_hint_list index_hint index_list table_subquery opt_val_list delete_stmt delete_opts delete_list opt_dot_star insert_stmt opt_ondupupdate insert_opts opt_into opt_col_names insert_vals_list insert_vals insert_asgn_list update_stmt update_opts update_asgn_list
+%type <a> stmt_list stmt expr val_list select_stmt opt_where opt_groupby groupby_list opt_asc_desc opt_with_rollup opt_having opt_orderby opt_limit opt_into_list column_list select_opts select_expr_list select_expr opt_as_alias table_references table_reference table_factor opt_as join_table opt_join_condition join_condition index_hint_list index_hint index_list table_subquery opt_val_list delete_stmt delete_opts delete_list opt_dot_star insert_stmt opt_ondupupdate insert_opts opt_into opt_col_names insert_vals_list insert_vals insert_asgn_list update_stmt update_opts update_asgn_list opt_for_update
 %type <intval> opt_inner_cross opt_outer left_or_right opt_left_or_right key_or_index opt_for_join 
 
 %%
@@ -85,6 +85,7 @@ expr: expr '+' expr { struct ast *child = $1; child->nextnode = $3; $$ = newast(
  |  expr BETWEEN expr BTWAND expr %prec BETWEEN { struct ast *child = $1; child->nextnode = $3; child->nextnode->nextnode = $5; $$ = newast(BETWEEN, child); }
  |  expr LIKE expr { struct ast *child = $1; child->nextnode = $3; $$ = newast(LIKE, child); }
  |  expr NOT LIKE expr { struct ast *child = $1; child->nextnode = $4; $$ = newast(NOTLIKE, child); }
+ |  '(' expr ')' { $$ = $2; }
 /*递归select和比较表达式*/
  |  expr COMPARISON '(' select_stmt ')' { struct ast *child = $1; child->nextnode = $4; $$ = newast_1(COMPARISON, child, $2); }
  |  expr COMPARISON ANY '(' select_stmt ')' { struct ast *child = $1; child->nextnode = $5; $$ = newast_1(COMPARISON_ANY, child, $2); }
@@ -119,9 +120,11 @@ stmt: select_stmt { $$ = $1; }
  ;
 
 select_stmt: SELECT select_opts select_expr_list { struct ast *temp = $3; if(temp->nextnode != NULL) temp = temp->nextnode; temp->nextnode = $2; $$ = newast(SELECT_QUERY, newast(SELECT, $3)); }
- |  SELECT select_opts select_expr_list FROM table_references opt_where opt_groupby opt_having opt_orderby opt_limit opt_into_list
+ |  SELECT select_opts select_expr_list FROM table_references opt_where opt_groupby opt_having opt_orderby opt_limit opt_into_list opt_for_update
     {
-        struct ast *temp = $3; if(temp->nextnode != NULL) temp = temp->nextnode; temp->nextnode = $2; struct ast *child = newast(SELECT, $3); struct ast *it = child; it->nextnode = newast(FROM, $5); it = it->nextnode;
+    	/*将select节点下分为两个子节点（SELECT_OPTS,SELECT_EXPR_LIST）*/
+    	struct ast *temp = newast(SELECT_EXPR_LIST, $3); temp->nextnode = newast(SELECT_OPTS, $2); struct ast *child = newast(SELECT, temp);
+        struct ast *it = child; it->nextnode = newast(FROM, $5); it = it->nextnode;
         if($6 != NULL) { it->nextnode = $6; it = it->nextnode; } if($7 != NULL) { it->nextnode = $7; it = it->nextnode; } if($8 != NULL) { it->nextnode = $8; it = it->nextnode; } if($9 != NULL) { it->nextnode = $9; it = it->nextnode; } if($10 != NULL) { it->nextnode = $10; it = it->nextnode; } if($11 != NULL) { it->nextnode = $11; it = it->nextnode; }
         $$ = newast(SELECT_QUERY, child);
     }
@@ -167,6 +170,10 @@ opt_into_list: /* 空规则 */ { $$ = NULL; }
 
 column_list: NAME { $$ = newnode_1(NAME, $1); }
  |  column_list ',' NAME { struct ast *node = newnode_1(NAME, $3); node->nextnode = $1; $$ = node; }
+ ;
+ 
+opt_for_update: /* 空规则 */ { $$ = NULL; }
+ | FOR UPDATE { $$ = NULL; }
  ;
 /***select选项和表引用***/
 select_opts: { select_opt_state = 0; $$ = NULL; }

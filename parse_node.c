@@ -227,6 +227,8 @@ char *getelemname(int nodetype)
 		case APPROXNUM : s = "APPROXNUM"; break;
 		case COMPARISON : s = "COMPARISON"; break;
 		case UPDATE_QUERY : s = "UPDATE_QUERY"; break;
+		case SELECT_EXPR_LIST : s = "SELECT_EXPR_LIST"; break;
+		case SELECT_OPTS : s = "SELECT_OPTS"; break;
 	}
 	return s;
 }
