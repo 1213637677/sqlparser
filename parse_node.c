@@ -229,6 +229,8 @@ char *getelemname(int nodetype)
 		case UPDATE_QUERY : s = "UPDATE_QUERY"; break;
 		case SELECT_EXPR_LIST : s = "SELECT_EXPR_LIST"; break;
 		case SELECT_OPTS : s = "SELECT_OPTS"; break;
+		case N_N_NODE : s = "N_N_NODE"; break;
+		case TABLE_SUBQUERY : s = "TABLE_SUBQUERY"; break;
 	}
 	return s;
 }

@@ -43,11 +43,11 @@ FILE * fp;
 %nonassoc USE FORCE IGNORE
 
 /*新关键字*/
-%token ADD SUB MUL DIV MOD AND OR XOR OROP ANDOP XOROP SHIFT NOT COMPARISON COMPARISON_ANY COMPARISON_SOME COMPARISON_ALL BETWEEN BTWAND LIKE NOTLIKE IS ISNOT NULLX IN NOTIN EXISTS SELECT SELECT_QUERY FROM WHERE GROUP BY GROUP_BY BY_NODE ASC DESC WITH_ROLLUP HAVING ORDER ORDER_BY LIMIT INTO ALL DISTINCT DISTINCTROW HIGH_PRIORITY STRAIGHT_JOIN SQL_SMALL_RESULT SQL_BIG_RESULT SQL_CALC_FOUND_ROWS ALLCOLUMN AS DTNAME JOIN JOINTYPE INNER CROSS OUTER LEFT RIGHT ON USING USE INDEXTYPE KEY INDEX FOR NATURAL FORCE IGNORE WITH ROLLUP ANY SOME TFNAME FUNC_NAME FCOUNT DELETE LOW_PRIORITY QUICK DELETE_QUERY INSERT VALUES INSERT_QUERY ON_DUPLICATE_KEY_UPDATE DUPLICATE UPDATE DELAYED INSERT_VALS DEFAULT SET UPDATE_QUERY SELECT_EXPR_LIST SELECT_OPTS
+%token ADD SUB MUL DIV MOD AND OR XOR OROP ANDOP XOROP SHIFT NOT COMPARISON COMPARISON_ANY COMPARISON_SOME COMPARISON_ALL BETWEEN BTWAND LIKE NOTLIKE IS ISNOT NULLX IN NOTIN EXISTS SELECT SELECT_QUERY FROM WHERE GROUP BY GROUP_BY BY_NODE ASC DESC WITH_ROLLUP HAVING ORDER ORDER_BY LIMIT INTO ALL DISTINCT DISTINCTROW HIGH_PRIORITY STRAIGHT_JOIN SQL_SMALL_RESULT SQL_BIG_RESULT SQL_CALC_FOUND_ROWS ALLCOLUMN AS DTNAME JOIN JOINTYPE INNER CROSS OUTER LEFT RIGHT ON USING USE INDEXTYPE KEY INDEX FOR NATURAL FORCE IGNORE WITH ROLLUP ANY SOME N_N_NODE FUNC_NAME FCOUNT DELETE LOW_PRIORITY QUICK DELETE_QUERY INSERT VALUES INSERT_QUERY ON_DUPLICATE_KEY_UPDATE DUPLICATE UPDATE DELAYED INSERT_VALS DEFAULT SET UPDATE_QUERY SELECT_EXPR_LIST SELECT_OPTS TABLE_SUBQUERY
 
 /*新节点值*/
-%type <a> stmt_list stmt expr val_list select_stmt opt_where opt_groupby groupby_list opt_asc_desc opt_with_rollup opt_having opt_orderby opt_limit opt_into_list column_list select_opts select_expr_list select_expr opt_as_alias table_references table_reference table_factor opt_as join_table opt_join_condition join_condition index_hint_list index_hint index_list table_subquery opt_val_list delete_stmt delete_opts delete_list opt_dot_star insert_stmt opt_ondupupdate insert_opts opt_into opt_col_names insert_vals_list insert_vals insert_asgn_list update_stmt update_opts update_asgn_list opt_for_update
-%type <intval> opt_inner_cross opt_outer left_or_right opt_left_or_right key_or_index opt_for_join 
+%type <a> stmt_list stmt expr val_list select_stmt opt_where opt_groupby groupby_list opt_asc_desc opt_with_rollup opt_having opt_orderby opt_limit opt_into_list column_list select_opts select_expr_list select_expr opt_as_alias table_references table_reference table_factor opt_as join_table opt_join_condition join_condition /*index_hint_list index_hint index_list*/ table_subquery opt_val_list delete_stmt delete_opts delete_list opt_dot_star insert_stmt opt_ondupupdate insert_opts opt_into opt_col_names insert_vals_list insert_vals insert_asgn_list update_stmt update_opts update_asgn_list opt_for_update
+%type <intval> opt_inner_cross opt_outer left_or_right opt_left_or_right /*key_or_index opt_for_join*/
 
 %%
 
@@ -59,7 +59,7 @@ stmt_list: stmt ';' { /*showtree($1, 0);*/createjson($1, fp, 1); fprintf(fp, "\n
 
 /***表达式***/
 expr: NAME { $$ = newnode_1(NAME, $1); }
- |  NAME '.' NAME { struct ast *child = newnode_1(NAME, $1); child->nextnode = newnode_1(NAME, $3); $$ = newast(TFNAME, child); }
+ |  NAME '.' NAME { struct ast *child = newnode_1(NAME, $1); child->nextnode = newnode_1(NAME, $3); $$ = newast(N_N_NODE, child); }
  |  STRING { $$ = newnode_1(STRING, $1); }
  |  INTNUM { $$ = newnode_1(INTNUM, $1); }
  |  BOOL { $$ = newnode_1(BOOL, $1); }
@@ -196,13 +196,20 @@ select_expr_list: select_expr { $$ = $1; }
 // |  expr AS NAME { struct ast *child = $1; child->nextnode = newnode(NAME, $3); $$ = newast(AS, child); }
 // |  expr NAME { struct ast *child = $1; child->nextnode = newnode(NAME, $2); $$ = newast(AS, child); }
 // ;
-select_expr: expr opt_as_alias { if($2 == NULL) $$ = $1; else { $1->nextnode = $2->childnode; $2->childnode = $1; $$ = $2; } }
+select_expr: expr opt_as_alias { $$ = $1; }
  ;
-opt_as_alias: AS NAME { $$ = newast(AS, newnode_1(NAME, $2)); }
- |  NAME { $$ = newast(AS, newnode_1(NAME, $1)); }
+ 
+//起别名对该sql解析并没有什么帮助，索引将as省略
+//opt_as_alias: AS NAME { $$ = newast(AS, newnode_1(NAME, $2)); }
+// |  NAME { $$ = newast(AS, newnode_1(NAME, $1)); }
+// |  /*空规则*/ { $$ = NULL; }
+// ;
+opt_as_alias: AS NAME { $$ = NULL; }
+ |  NAME { $$ = NULL; }
  |  /*空规则*/ { $$ = NULL; }
  ;
 /***select表引用***/
+//table_references是一个 struct ast 链表
 table_references: table_reference { $$ = $1; }
  |  table_references ',' table_reference { struct ast *child = $3; $3->nextnode = $1; $$ = $1; }
  ;
@@ -211,13 +218,18 @@ table_reference: table_factor { $$ = $1; }
  |  join_table { $$ = $1; }
  ;
 
-table_factor: NAME opt_as_alias index_hint_list { struct ast *node = newnode_1(NAME, $1); node->childnode = $3; if($2 == NULL) $$ = node; else { node->nextnode = $2->childnode; $2->childnode = node; $$ = $2; } }
- |  NAME '.' NAME opt_as_alias 
-    { 
-        struct ast *child = newnode_1(NAME, $1); child->nextnode = newnode_1(NAME, $3); child = newast(DTNAME, child); 
-        if($4 == NULL) $$ = child; else { child->nextnode = $4->childnode; $4->childnode = child; $$ = $4; }
-    }
- |  table_subquery opt_as NAME { struct ast *child = $1; child->nextnode = newnode_1(NAME, $3); $$ = newast(AS, child); }
+//index_hint及表的别名无用
+//table_factor中有两个特殊的结构DTNAME(带有数据库名的表)、TABLE_SUBQUERY（通过查询构建出的临时表）
+table_factor: NAME opt_as_alias index_hint_list { $$ = newnode_1(NAME, $1); }
+//    { struct ast *node = newnode_1(NAME, $1); node->childnode = $3; if($2 == NULL) $$ = node; else { node->nextnode = $2->childnode; $2->childnode = node; $$ = $2; } }
+// |  NAME '.' NAME opt_as_alias
+ |  NAME '.' NAME opt_as_alias index_hint_list { struct ast *child = newnode_1(NAME, $1); child->nextnode = newnode_1(NAME, $3); child = newast(DTNAME, child); $$ = child; }
+//    { 
+//        struct ast *child = newnode_1(NAME, $1); child->nextnode = newnode_1(NAME, $3); child = newast(DTNAME, child); 
+//        if($4 == NULL) $$ = child; else { child->nextnode = $4->childnode; $4->childnode = child; $$ = $4; }
+//    }
+ |  table_subquery opt_as NAME { struct ast *child = $1; child->nextnode = newnode_1(NAME, $3); $$ = newast(TABLE_SUBQUERY, child); }
+// |  table_subquery opt_as NAME { struct ast *child = $1; child->nextnode = newnode_1(NAME, $3); $$ = newast(AS, child); }
  |  '(' table_references ')' { $$ = $2; }
  ;
 
@@ -229,8 +241,8 @@ join_table: table_reference opt_inner_cross JOIN table_factor opt_join_condition
     {
         struct ast *child = $1; child->nextnode = $4; child->nextnode->nextnode = $5;
         struct ast *rtn;
-	switch($2) { case 0: rtn = newnode_1(JOINTYPE, "JOIN"); break; case 1: rtn = newnode_1(JOINTYPE, "INNER_JOIN"); break; case 2: rtn = newnode_1(JOINTYPE, "CROSS_JOIN"); break; }
-	rtn->childnode = child;
+	    switch($2) { case 0: rtn = newnode_1(JOINTYPE, "JOIN"); break; case 1: rtn = newnode_1(JOINTYPE, "INNER_JOIN"); break; case 2: rtn = newnode_1(JOINTYPE, "CROSS_JOIN"); break; }
+	    rtn->childnode = child;
         $$ = rtn;
     }
  |  table_reference STRAIGHT_JOIN table_factor opt_join_condition 
@@ -276,33 +288,59 @@ join_condition: ON expr { $$ = newast(ON, $2); }
  |  USING '(' column_list ')' { $$ = newast(USING, $3); }
  ;
 
-index_hint_list: index_hint { $$ = $1; }
- |  index_hint_list index_hint { struct ast *child = $2; child->nextnode = $1; $$ = $1; }
- |  /*空规则*/ { $$ = NULL; }
+//该部分暂时不需要考虑
+index_hint_list: index_hint
+ |  index_hint_list index_hint
+ |  /*空规则*/
  ;
+//index_hint_list: index_hint { $$ = $1; }
+// |  index_hint_list index_hint { struct ast *child = $2; child->nextnode = $1; $$ = $1; }
+// |  /*空规则*/ { $$ = NULL; }
+// ;
 
+//该部分暂时不需要考虑
 index_hint: USE key_or_index opt_for_join '(' index_list ')'
-    { struct ast *rtn; if($2 == 1 && $3 == 0) rtn = newnode_1(INDEXTYPE, "USE_KEY"); else if($2 == 1 && $3 == 1) rtn = newnode_1(INDEXTYPE, "USE_KEY_FOR_JOIN"); else if($2 == 1 && $3 == 2) rtn = newnode_1(INDEXTYPE, "USE_KEY_FOR_ORDER_BY"); else if($2 == 1 && $3 == 3) rtn = newnode_1(INDEXTYPE, "USE_KEY_FOR_GROUP_BY"); else if($2 == 2 && $3 == 0) rtn = newnode_1(INDEXTYPE, "USE_INDEX"); else if($2 == 2 && $3 == 1) rtn = newnode_1(INDEXTYPE, "USE_INDEX_FOR_JOIN"); else if($2 == 2 && $3 == 2) rtn = newnode_1(INDEXTYPE, "USE_INDEX_FOR_ORDER_BY"); else if($2 == 2 && $3 == 3) rtn = newnode_1(INDEXTYPE, "USE_INDEX_FOR_GROUP_BY"); rtn->childnode = $5; $$ = rtn; }
  |  IGNORE key_or_index opt_for_join '(' index_list ')'
-    { struct ast *rtn; if($2 == 1 && $3 == 0) rtn = newnode_1(INDEXTYPE, "IGNORE_KEY"); else if($2 == 1 && $3 == 1) rtn = newnode_1(INDEXTYPE, "IGNORE_KEY_FOR_JOIN"); else if($2 == 1 && $3 == 2) rtn = newnode_1(INDEXTYPE, "IGNORE_KEY_FOR_ORDER_BY"); else if($2 == 1 && $3 == 3) rtn = newnode_1(INDEXTYPE, "IGNORE_KEY_FOR_GROUP_BY"); else if($2 == 2 && $3 == 0) rtn = newnode_1(INDEXTYPE, "IGNORE_INDEX"); else if($2 == 2 && $3 == 1) rtn = newnode_1(INDEXTYPE, "IGNORE_INDEX_FOR_JOIN"); else if($2 == 2 && $3 == 2) rtn = newnode_1(INDEXTYPE, "IGNORE_INDEX_FOR_ORDER_BY"); else if($2 == 2 && $3 == 3) rtn = newnode_1(INDEXTYPE, "IGNORE_INDEX_FOR_GROUP_BY"); rtn->childnode = $5; $$ = rtn; }
  |  FORCE key_or_index opt_for_join '(' index_list ')'
-    { struct ast *rtn; if($2 == 1 && $3 == 0) rtn = newnode_1(INDEXTYPE, "FORCE_KEY"); else if($2 == 1 && $3 == 1) rtn = newnode_1(INDEXTYPE, "FORCE_KEY_FOR_JOIN"); else if($2 == 1 && $3 == 2) rtn = newnode_1(INDEXTYPE, "FORCE_KEY_FOR_ORDER_BY"); else if($2 == 1 && $3 == 3) rtn = newnode_1(INDEXTYPE, "FORCE_KEY_FOR_GROUP_BY"); else if($2 == 2 && $3 == 0) rtn = newnode_1(INDEXTYPE, "FORCE_INDEX"); else if($2 == 2 && $3 == 1) rtn = newnode_1(INDEXTYPE, "FORCE_INDEX_FOR_JOIN"); else if($2 == 2 && $3 == 2) rtn = newnode_1(INDEXTYPE, "FORCE_INDEX_FOR_ORDER_BY"); else if($2 == 2 && $3 == 3) rtn = newnode_1(INDEXTYPE, "FORCE_INDEX_FOR_GROUP_BY"); rtn->childnode = $5; $$ = rtn; }
  ;
+//index_hint: USE key_or_index opt_for_join '(' index_list ')'
+//    { struct ast *rtn; if($2 == 1 && $3 == 0) rtn = newnode_1(INDEXTYPE, "USE_KEY"); else if($2 == 1 && $3 == 1) rtn = newnode_1(INDEXTYPE, "USE_KEY_FOR_JOIN"); else if($2 == 1 && $3 == 2) rtn = newnode_1(INDEXTYPE, "USE_KEY_FOR_ORDER_BY"); else if($2 == 1 && $3 == 3) rtn = newnode_1(INDEXTYPE, "USE_KEY_FOR_GROUP_BY"); else if($2 == 2 && $3 == 0) rtn = newnode_1(INDEXTYPE, "USE_INDEX"); else if($2 == 2 && $3 == 1) rtn = newnode_1(INDEXTYPE, "USE_INDEX_FOR_JOIN"); else if($2 == 2 && $3 == 2) rtn = newnode_1(INDEXTYPE, "USE_INDEX_FOR_ORDER_BY"); else if($2 == 2 && $3 == 3) rtn = newnode_1(INDEXTYPE, "USE_INDEX_FOR_GROUP_BY"); rtn->childnode = $5; $$ = rtn; }
+// |  IGNORE key_or_index opt_for_join '(' index_list ')'
+//    { struct ast *rtn; if($2 == 1 && $3 == 0) rtn = newnode_1(INDEXTYPE, "IGNORE_KEY"); else if($2 == 1 && $3 == 1) rtn = newnode_1(INDEXTYPE, "IGNORE_KEY_FOR_JOIN"); else if($2 == 1 && $3 == 2) rtn = newnode_1(INDEXTYPE, "IGNORE_KEY_FOR_ORDER_BY"); else if($2 == 1 && $3 == 3) rtn = newnode_1(INDEXTYPE, "IGNORE_KEY_FOR_GROUP_BY"); else if($2 == 2 && $3 == 0) rtn = newnode_1(INDEXTYPE, "IGNORE_INDEX"); else if($2 == 2 && $3 == 1) rtn = newnode_1(INDEXTYPE, "IGNORE_INDEX_FOR_JOIN"); else if($2 == 2 && $3 == 2) rtn = newnode_1(INDEXTYPE, "IGNORE_INDEX_FOR_ORDER_BY"); else if($2 == 2 && $3 == 3) rtn = newnode_1(INDEXTYPE, "IGNORE_INDEX_FOR_GROUP_BY"); rtn->childnode = $5; $$ = rtn; }
+// |  FORCE key_or_index opt_for_join '(' index_list ')'
+//    { struct ast *rtn; if($2 == 1 && $3 == 0) rtn = newnode_1(INDEXTYPE, "FORCE_KEY"); else if($2 == 1 && $3 == 1) rtn = newnode_1(INDEXTYPE, "FORCE_KEY_FOR_JOIN"); else if($2 == 1 && $3 == 2) rtn = newnode_1(INDEXTYPE, "FORCE_KEY_FOR_ORDER_BY"); else if($2 == 1 && $3 == 3) rtn = newnode_1(INDEXTYPE, "FORCE_KEY_FOR_GROUP_BY"); else if($2 == 2 && $3 == 0) rtn = newnode_1(INDEXTYPE, "FORCE_INDEX"); else if($2 == 2 && $3 == 1) rtn = newnode_1(INDEXTYPE, "FORCE_INDEX_FOR_JOIN"); else if($2 == 2 && $3 == 2) rtn = newnode_1(INDEXTYPE, "FORCE_INDEX_FOR_ORDER_BY"); else if($2 == 2 && $3 == 3) rtn = newnode_1(INDEXTYPE, "FORCE_INDEX_FOR_GROUP_BY"); rtn->childnode = $5; $$ = rtn; }
+// ;
 
-key_or_index: KEY { $$ = 1; }
- |  INDEX { $$ = 2; }
+//该部分暂时不需要考虑
+key_or_index: KEY
+ |  INDEX
  ;
+//key_or_index: KEY { $$ = 1; }
+// |  INDEX { $$ = 2; }
+// ;
 
-opt_for_join: FOR JOIN { $$ = 1; }
- |  FOR ORDER BY { $$ = 2; }
- |  FOR GROUP BY { $$ = 3; }
- |  /* 空规则 */ { $$ = 0; }
+//该部分暂时不需要考虑
+opt_for_join: FOR JOIN
+ |  FOR ORDER BY
+ |  FOR GROUP BY
+ |  /* 空规则 */
  ;
+//opt_for_join: FOR JOIN { $$ = 1; }
+// |  FOR ORDER BY { $$ = 2; }
+// |  FOR GROUP BY { $$ = 3; }
+// |  /* 空规则 */ { $$ = 0; }
+// ;
 
-index_list: NAME { $$ = newnode_1(NAME, $1); }
- |  index_list ',' NAME { struct ast *rtn = newnode_1(NAME, $3); rtn->nextnode = $1; $$ = rtn; }
+//该部分暂时不需要考虑
+index_list: NAME
+ |  index_list ',' NAME
+ |  /*空*/
  ;
+//index_list: NAME { $$ = newnode_1(NAME, $1); }
+// |  index_list ',' NAME { struct ast *rtn = newnode_1(NAME, $3); rtn->nextnode = $1; $$ = rtn; }
+// ;
 
+//需要考虑该部分的解析
 table_subquery: '(' select_stmt ')' { $$ = $2; }
  ;
 
