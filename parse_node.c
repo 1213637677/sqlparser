@@ -156,7 +156,7 @@ void createjson_1(struct ast *node, FILE *writerstr, int state)
 /* 将枚举类型转化为char* */
 char *getelemname(int nodetype)
 {
-	char* s;
+	char *s;
 	switch(nodetype)
 	{
 		case ADD : s = "+"; break;
@@ -231,6 +231,7 @@ char *getelemname(int nodetype)
 		case SELECT_OPTS : s = "SELECT_OPTS"; break;
 		case N_N_NODE : s = "N_N_NODE"; break;
 		case TABLE_SUBQUERY : s = "TABLE_SUBQUERY"; break;
+		case JOINTYPE : s = "JOINTYPE"; break;
 	}
 	return s;
 }

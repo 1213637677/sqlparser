@@ -200,34 +200,55 @@ select_expr: expr opt_as_alias { $$ = $1; }
  ;
  
 //起别名对该sql解析并没有什么帮助，索引将as省略
-//opt_as_alias: AS NAME { $$ = newast(AS, newnode_1(NAME, $2)); }
-// |  NAME { $$ = newast(AS, newnode_1(NAME, $1)); }
-// |  /*空规则*/ { $$ = NULL; }
-// ;
-opt_as_alias: AS NAME { $$ = NULL; }
- |  NAME { $$ = NULL; }
+opt_as_alias: AS NAME { $$ = newast(AS, newnode_1(NAME, $2)); }
+ |  NAME { $$ = newast(AS, newnode_1(NAME, $1)); }
  |  /*空规则*/ { $$ = NULL; }
  ;
+
 /***select表引用***/
-//table_references是一个 struct ast 链表
+//table_references是一个 struct ast 指针节点
 table_references: table_reference { $$ = $1; }
- |  table_references ',' table_reference { struct ast *child = $3; $3->nextnode = $1; $$ = $1; }
+ |  table_references ',' table_reference
+	{
+		struct ast *child = $1; child->nextnode = $3;
+		struct ast *rtn = newnode_1(JOINTYPE, "JOIN");
+		rtn->childnode = child;
+		$$ = rtn;
+	}
  ;
 
 table_reference: table_factor { $$ = $1; }
  |  join_table { $$ = $1; }
  ;
 
-//index_hint及表的别名无用
+//index_hint无用
 //table_factor中有两个特殊的结构DTNAME(带有数据库名的表)、TABLE_SUBQUERY（通过查询构建出的临时表）
-table_factor: NAME opt_as_alias index_hint_list { $$ = newnode_1(NAME, $1); }
-//    { struct ast *node = newnode_1(NAME, $1); node->childnode = $3; if($2 == NULL) $$ = node; else { node->nextnode = $2->childnode; $2->childnode = node; $$ = $2; } }
+//table_factor应该只是一个节点，而不是一个链表
+table_factor: NAME opt_as_alias index_hint_list
+//{ $$ = newnode_1(NAME, $1); }
+    {
+    	struct ast *node = newnode_1(NAME, $1);
+    	if($2 == NULL) $$ = node;
+    	else {
+    		node->nextnode = $2->childnode;
+    		$2->childnode = node;
+    		$$ = $2;
+    	}
+    }
 // |  NAME '.' NAME opt_as_alias
- |  NAME '.' NAME opt_as_alias index_hint_list { struct ast *child = newnode_1(NAME, $1); child->nextnode = newnode_1(NAME, $3); child = newast(DTNAME, child); $$ = child; }
-//    { 
-//        struct ast *child = newnode_1(NAME, $1); child->nextnode = newnode_1(NAME, $3); child = newast(DTNAME, child); 
-//        if($4 == NULL) $$ = child; else { child->nextnode = $4->childnode; $4->childnode = child; $$ = $4; }
-//    }
+ |  NAME '.' NAME opt_as_alias index_hint_list
+//{ struct ast *child = newnode_1(NAME, $1); child->nextnode = newnode_1(NAME, $3); child = newast(DTNAME, child); $$ = child; }
+    { 
+        struct ast *child = newnode_1(NAME, $1);
+        child->nextnode = newnode_1(NAME, $3);
+        child = newast(DTNAME, child); 
+        if($4 == NULL) $$ = child;
+        else {
+        	child->nextnode = $4->childnode;
+        	$4->childnode = child;
+        	$$ = $4;
+        }
+    }
  |  table_subquery opt_as NAME { struct ast *child = $1; child->nextnode = newnode_1(NAME, $3); $$ = newast(TABLE_SUBQUERY, child); }
 // |  table_subquery opt_as NAME { struct ast *child = $1; child->nextnode = newnode_1(NAME, $3); $$ = newast(AS, child); }
  |  '(' table_references ')' { $$ = $2; }
@@ -239,15 +260,17 @@ opt_as: AS { $$ = NULL; }
 
 join_table: table_reference opt_inner_cross JOIN table_factor opt_join_condition
     {
+    	//这部分有错误
         struct ast *child = $1; child->nextnode = $4; child->nextnode->nextnode = $5;
         struct ast *rtn;
-	    switch($2) { case 0: rtn = newnode_1(JOINTYPE, "JOIN"); break; case 1: rtn = newnode_1(JOINTYPE, "INNER_JOIN"); break; case 2: rtn = newnode_1(JOINTYPE, "CROSS_JOIN"); break; }
+        //因为在mysql中, join, inner join 和 cross join 是等价的，所以同一为join
+	    rtn = newnode_1(JOINTYPE, "JOIN");
 	    rtn->childnode = child;
         $$ = rtn;
     }
  |  table_reference STRAIGHT_JOIN table_factor opt_join_condition 
     { struct ast *child = $1; child->nextnode = $3; child->nextnode->nextnode = $4; struct ast *rtn = newnode_1(JOINTYPE, "STRAIGHT_JOIN"); rtn->childnode = child; $$ = rtn; }
- |  table_reference left_or_right opt_outer JOIN table_factor join_condition 
+ |  table_reference left_or_right opt_outer JOIN table_reference join_condition
     {
         struct ast *child = $1; child->nextnode = $5; child->nextnode->nextnode = $6; struct ast *rtn;
         if($2 == 1 && $3 == 0) rtn = newnode_1(JOINTYPE, "LEFT_JOIN"); else if($2 == 1 && $3 == 1) rtn = newnode_1(JOINTYPE, "LEFT_OUTER_JOIN"); else if($2 == 2 && $3 == 0) rtn = newnode_1(JOINTYPE, "RIGHT_JOIN"); else if($2 == 2 && $3 == 1) rtn = newnode_1(JOINTYPE, "RIGHT_OUTER_JOIN");
